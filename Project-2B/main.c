@@ -29,6 +29,8 @@ void spi_comm_start(void);
 void set_led(led_name_t led_number, unsigned int value);
 void ret_prox(int *prox);
 void motor_control(int state, int *p_rT);
+void turn(int speed, int dir, float t, bool obj);
+emg_adj(int sensor);
 
 /*Main function*/
 int main(void)
@@ -90,6 +92,9 @@ void ret_prox(int *prox){
     */
     for(int i =0; i<8; i++){
         prox[i] = get_calibrated_prox((unsigned int)i);
+        If(){/*If one of the front two sensors sense something too close*/
+            emg_adj(i); 
+        }
     }
 }
 
@@ -101,54 +106,119 @@ void motor_control(int state, int *p_rT){
     rT - Indicating what direction to turn
     OUTPUT - None
     */
-    float size = 8;
+    float size = 8; /*Size of the robot*/
     int wan_speed = 8; /*cm/s*/
-    int cont_speed = wan_speed*1000/15.4;
+    int cont_speed = wan_speed*1000/15.4; /*Conversion for the control speed*/
     int dir;
     switch(state){
         case 0:
             left_motor_set_speed(0);
             right_motor_set_speed(0);
             if(*p_rT == 0){
-                dir = 1;
+                dir = -1;
                 *p_rT = 1;
             }
             else{
-                dir = -1;
+                dir = 1;
                 *p_rT = 0;
             }
 
-            float rads = 0.2*cont_speed/size;
+            float rads = 0.2*wan_speed/size;
             float t = (math.pi/2)/rads;
+            bool obj = true; /*Obstruction in the movement not detected*/
 
             /*Adjust speeds*/
-            left_motor_set_speed(dir*cont_speed);
-            right_motor_set_speed(-dir*cont_speed);
-
-            chThdSleepMilliseconds((int)t);
-
-            left_motor_set_speed(cont_speed);
-            right_motor_set_speed(cont_speed);     
-
-            chThdSleepMilliseconds((int)(size/wan_speed));     
-
-            left_motor_set_speed(dir*cont_speed);
-            right_motor_set_speed(-dir*cont_speed);
-
-            chThdSleepMilliseconds((int)t);
-
-            left_motor_set_speed(cont_speed);
-            right_motor_set_speed(cont_speed);   
+            turn(cont_speed, dir,t, obj);
 
             break;
         case 1:
+            left_motor_set_speed(0);
+            right_motor_set_speed(0);
+
+            if(*p_rT == 0){
+                dir = -1;
+                *p_rT = 1;
+
+                float rads = 0.2*wan_speed/size;
+                float t = (math.pi/2)/rads;
+                bool obj = true;
+            }
+            else{
+                dir = 1;
+                *p_rT = 0;
+
+                float rads = 0.2*wan_speed/size;
+                float t = (math.pi)/rads; 
+                bool obj = false;               
+
+            }
+
+            turn(cont_speed, dir,t, obj);
+
             break;
         case 2:
+            left_motor_set_speed(0);
+            right_motor_set_speed(0);
+
+            if(*p_rT == 0){
+                dir = -1;
+                *p_rT = 1;
+
+                float rads = 0.2*wan_speed/size;
+                float t = (math.pi)/rads;
+                bool obj = false;
+            }
+            else{
+                dir = 1;
+                *p_rT = 0;
+
+                float rads = 0.2*wan_speed/size;
+                float t = (math.pi/2)/rads; 
+                bool obj = true;               
+
+            }
+
+            turn(cont_speed, dir,t, obj);
+
             break;
         case 3:
             left_motor_set_speed(cont_speed);
             right_motor_set_speed(cont_speed);
             break;
+    }
+}
+
+void turn(int speed, int dir, float t, bool obj){
+    /*
+    Function used to turn the robot when in normal movement and an obsticle is detected in front of it
+    INPUT:
+    Speed - Control speed to be sent to the motors
+    Dir - Direction control for the two stepper motors 
+    t - time for the turn
+    obj- boolean to determine if the turn will be a safe one
+
+    OUTPUT:
+    None 
+    */
+
+    left_motor_set_speed(dir*cont_speed);
+    right_motor_set_speed(-dir*cont_speed);
+
+    chThdSleepMilliseconds((int)t*1000);
+
+    left_motor_set_speed(cont_speed);
+    right_motor_set_speed(cont_speed); 
+
+    if(obj){
+        chThdSleepMilliseconds((int)(size/wan_speed)*1000);     
+
+        left_motor_set_speed(dir*cont_speed);
+        right_motor_set_speed(-dir*cont_speed);
+
+        chThdSleepMilliseconds((int)t*1000);
+
+        left_motor_set_speed(cont_speed);
+        right_motor_set_speed(cont_speed);  
     }
 }
 
