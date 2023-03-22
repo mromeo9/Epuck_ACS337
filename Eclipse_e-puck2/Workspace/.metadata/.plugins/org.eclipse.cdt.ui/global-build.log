@@ -1,14 +1,12 @@
-16:49:12 **** Incremental Build of configuration Default for project Project-2B ****
+12:21:32 **** Incremental Build of configuration Default for project Project-2B ****
 make all 
-[1;34mCompiling main.c[0m
-main.c: In function 'main':
-main.c:42:5: error: too few arguments to function 'proximity_start'
-     proximity_start();
-     ^~~~~~~~~~~~~~~
-In file included from main.c:19:0:
-../e-puck2_main-processor/src/sensors/proximity.h:36:6: note: declared here
- void proximity_start(uint8_t mode);
-      ^~~~~~~~~~~~~~~
-../e-puck2_main-processor/ChibiOS//os/common/ports/ARMCMx/compilers/GCC/rules.mk:216: recipe for target 'build/obj/main.o' failed
-make: *** [build/obj/main.o] Error 1
-"make all" terminated with exit code 2. Build might be incomplete.
+make: Nothing to be done for 'all'.
+12:21:37 **** Incremental Build of configuration Default for project Project-2B ****
+make all 
+make: Nothing to be done for 'all'.
+12:22:41 **** Incremental Build of configuration Default for project Project-2B ****
+make all 
+make: Nothing to be done for 'all'.
+12:23:24 **** Incremental Build of configuration Default for project Project-2B ****
+make all 
+make: Nothing to be done for 'all'.

@@ -1,0 +1,250 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include "ch.h"
+#include "hal.h"
+#include "memory_protection.h"
+#include <main.h>
+#include "leds.h"
+#include "spi_comm.h"
+#include "motors.h"
+#include "selector.h"
+#include "epuck1x/uart/e_uart_char.h"
+#include "stdio.h"
+#include "serial_comm.h"
+#include "chprintf.h"
+#include "usbcfg.h"
+#include "sensors/proximity.h"
+#include "sensors/VL53L0X/VL53L0X.h"
+
+/*Defining the bus process*/
+messagebus_t bus;
+MUTEX_DECL(bus_lock);
+CONDVAR_DECL(bus_condvar);
+
+/*Functions Initialisations*/
+void clear_leds(void);
+void spi_comm_start(void);
+void set_led(led_name_t led_number, unsigned int value);
+void ret_prox(int *prox);
+void motor_control(int state, int *p_rT);
+void turn(int speed, int dir, float t, bool obj, float size);
+/*void emg_adj(int sensor);*/
+
+/*Main function*/
+int main(void)
+{
+
+/*Pre function initialisations*/
+    halInit();
+    chSysInit();
+    mpu_init();
+    motors_init();
+    messagebus_init(&bus,&bus_lock, &bus_condvar);
+    serial_start();
+    proximity_start(0);
+    calibrate_ir();
+    clear_leds();
+    spi_comm_start();
+    VL53L0X_start();
+
+/*Variable initialisation*/
+    int proxs[8];
+    int rT = 0; /*turn count*/
+    int state; /*State*/
+    int *p_rT; /*pointer to rT*/
+    p_rT = &rT;
+    char str[100];
+    int str_length;
+    int distance;
+
+/*Bus initialisation*/
+
+
+    /*Infinite loop*/
+    while (1) {
+
+        /*Retrieve the proximity information*/
+    	distance = VL53L0X_get_dist_mm();
+        ret_prox(proxs);
+
+        /*If statement to control state*/
+        if(distance <= 30){/*State 0 - Obsticle in front*/
+            state = 0;
+        }
+        else if(distance <= 30 && proxs[5] <= 4){/*State 1-Obsticle in front and to right*/
+            state = 1;
+        }
+        else if(distance <= 30 && proxs[2] <= 4){/*State 2-Obsticle in front and to left*/
+            state = 2;
+        }
+        else{/*State 3 - Constant motion*/
+            state = 3;
+        }
+
+        motor_control(state, p_rT);
+
+
+    }
+}
+
+void ret_prox(int *prox){
+    /*
+    Fuction that returns the readings to each proximity sensor
+    INPUT - Pointer to an array
+    OUTPUT - None
+    */
+    for(int i =0; i<8; i++){
+        prox[i] = get_calibrated_prox(i);
+        /*If(prox[i] >=  1000 && (i==6||i==7||i==0||i==1)){
+            emg_adj(i);
+        }*/
+    }
+}
+
+void motor_control(int state, int *p_rT){
+    /*
+    Fuction to control the motors of the
+    INPUT
+    State - state the robot is in
+    rT - Indicating what direction to turn
+    OUTPUT - None
+    */
+    float size = 7.3; /*Size of the robot*/
+    int wan_speed = 8; /*cm/s*/
+    int cont_speed = wan_speed*1000/15.4; /*Conversion for the control speed*/
+    int dir;
+    float pi = 3.14;
+    float t;
+    float rads;
+    switch(state){
+        case 0:
+            left_motor_set_speed(0);
+            right_motor_set_speed(0);
+            if(*p_rT == 0){
+                dir = -1;
+                *p_rT = 1;
+            }
+            else{
+                dir = 1;
+                *p_rT = 0;
+            }
+
+            rads = 0.2*wan_speed/size;
+            t = (pi/2)/rads;
+            bool obj = true; /*Obstruction in the movement not detected*/
+
+            /*Adjust speeds*/
+            turn(cont_speed, dir,t, obj, size);
+
+            break;
+        case 1:
+            left_motor_set_speed(0);
+            right_motor_set_speed(0);
+
+            if(*p_rT == 0){
+                dir = -1;
+                *p_rT = 1;
+
+                rads = 0.2*wan_speed/size;
+                t = (pi/2)/rads;
+                bool obj = true;
+            }
+            else{
+                dir = 1;
+                *p_rT = 0;
+
+                rads = 0.2*wan_speed/size;
+                t = (pi)/rads;
+                bool obj = false;
+
+            }
+
+            turn(cont_speed, dir,t, obj, size);
+
+            break;
+        case 2:
+            left_motor_set_speed(0);
+            right_motor_set_speed(0);
+
+            if(*p_rT == 0){
+                dir = -1;
+                *p_rT = 1;
+
+                rads = 0.2*wan_speed/size;
+                t = (pi)/rads;
+                bool obj = false;
+            }
+            else{
+                dir = 1;
+                *p_rT = 0;
+
+                rads = 0.2*wan_speed/size;
+                t = (pi/2)/rads;
+                bool obj = true;
+
+            }
+
+            turn(cont_speed, dir,t, obj, size);
+
+            break;
+        case 3:
+            left_motor_set_speed(cont_speed);
+            right_motor_set_speed(cont_speed);
+            break;
+    }
+}
+
+void turn(int speed, int dir, float t, bool obj, float size){
+    /*
+    Function used to turn the robot when in normal movement and an obsticle is detected in front of it
+    INPUT:
+    Speed - Control speed to be sent to the motors
+    Dir - Direction control for the two stepper motors
+    t - time for the turn
+    obj- boolean to determine if the turn will be a safe one
+    OUTPUT:
+    None
+    */
+	chSysInit();
+
+    left_motor_set_speed(dir*speed);
+    right_motor_set_speed(-dir*speed);
+
+    chThdSleepMilliseconds((int)t*1000);
+
+    left_motor_set_speed(speed);
+    right_motor_set_speed(speed);
+
+    if(obj){
+    	chThdSleepMilliseconds((int)(size/(speed*(1000/15.4))*1000));
+
+        left_motor_set_speed(dir*speed);
+        right_motor_set_speed(-dir*speed);
+
+        chThdSleepMilliseconds((int)t*1000);
+
+        left_motor_set_speed(speed);
+        right_motor_set_speed(speed);
+    }
+}
+
+void emg_adj(){
+
+    /*stop and turn the robot until the sensor no longer is in danger*/
+
+    /*Move until the back sensor(checking any other sensor to make sure they are all still safe) is reading then readjust the angle */
+
+    /*check all sensors are safe then proceed forward*/
+}
+
+
+#define STACK_CHK_GUARD 0xe2dee396
+uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
+
+void __stack_chk_fail(void)
+{
+    chSysHalt("Stack smashing detected");
+}
+
