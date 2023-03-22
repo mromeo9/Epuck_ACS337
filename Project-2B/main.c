@@ -59,26 +59,34 @@ int main(void)
 /*Bus initialisation*/
     messagebus_init(&bus,&bus_lock, &bus_codvar);
 
-    /* Infinite loop. */
+    /*Infinite loop*/
     while (1) {
-        /*Retrieve the proximity information*/
+
+
+        for(int i=0;i<8;i++){
+            int pro = get_calibrated_prox((unsigned int)i);
+            str_length = sprintf(str, "The value sensor %d is %d",i,pro);
+            e_send_uart1_char(str, str_length);
+        }
+
+        /*Retrieve the proximity information
         ret_prox(proxs);
 
-        /*If statement to control state*/
-        if(){/*State 0 - Obsticle in front*/
+        /*If statement to control state
+        if(){/*State 0 - Obsticle in front
             state = 0;
         }
-        else if(){/*State 1-Obsticle in front and to right*/
+        else if(){/*State 1-Obsticle in front and to right
             state = 1;
         }
-        else if(){/*State 2-Obsticle in front and to left*/
+        else if(){/*State 2-Obsticle in front and to left
             state = 2;
         }
-        else{/*State 3 - Constant motion*/
+        else{/*State 3 - Constant motion
             state = 3;
         }
 
-        motor_control(state, p_rT);
+        motor_control(state, p_rT);*/
 
 
     }
@@ -220,6 +228,15 @@ void turn(int speed, int dir, float t, bool obj){
         left_motor_set_speed(cont_speed);
         right_motor_set_speed(cont_speed);  
     }
+}
+
+void emg_adj(){
+
+    /*stop and turn the robot until the sensor no longer is in danger*/
+
+    /*Move until the back sensor(checking any other sensor to make sure they are all still safe) is reading then readjust the angle */
+
+    /*check all sensors are safe then proceed forward*/
 }
 
 #define STACK_CHK_GUARD 0xe2dee396
