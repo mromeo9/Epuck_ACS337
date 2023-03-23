@@ -26,7 +26,8 @@ CONDVAR_DECL(bus_condvar);
 /*Functions Initialisations*/
 void ret_prox(int *prox);
 void motor_control(int *prox, int sensor);
-void start(void);
+void led_switch(int *prox);
+void sound_control();
 
 /*Main function*/
 int main(void)
@@ -51,7 +52,6 @@ int main(void)
     /*Infinite loop*/
     while (1) {
         /*Retrieve the proximity information*/
-        start();
         ret_prox(proxs);
     }
 }
@@ -80,7 +80,7 @@ void ret_prox(int *prox){
     }
 }
 
-void motor_control(int *proxs, int sensor){
+void motor_control(int *prox, int sensor){
     /*
     Fuction to control the motors of the
     INPUT
@@ -99,15 +99,15 @@ void motor_control(int *proxs, int sensor){
 	int uTurn = 0;
 
     /*Logic for the direction of turn*/
-    if(proxs[2] >= 300 && proxs[5] >= 300){
+    if(prox[2] >= 300 && prox[5] >= 300){
         uTurn = 1;
         dir = 1;
     }
     else{
-        if(proxs[2] < proxs[5]){
+        if(prox[2] < prox[5]){
             dir = -1;
         }
-        else if(proxs[5] < proxs[2]){
+        else if(prox[5] < prox[2]){
             dir = 1;
         }
         else{
@@ -122,7 +122,7 @@ void motor_control(int *proxs, int sensor){
     /*Keep turning until the sensor that is the problem is no
     longer a problem*/
     while(1){
-        if(proxs[sensor] <= 800){
+        if(prox[sensor] <= 800){
             break;
         }
     }
@@ -132,6 +132,37 @@ void motor_control(int *proxs, int sensor){
 	right_motor_set_speed(con_speed);
 
 }
+
+void led_switch(int *prox){
+
+    int rgb[3][3] = {{0,10,0},{10,6,0},{10,0,0}};
+    int red_val[] = {0,2,1};
+    int sel;
+    led_name_t leds[] ={LED1, LED2, LED3, LED4, 
+                        LED5, LED6, LED7, LED8};
+    for(int i = 0; i<8; i++){
+        sel = prox[i]/300;
+        if(i == 0 || i == 7){
+            set_led(leds[0],red_val[sel]);
+        }
+        else if(i ~= 3 && i ~=4){
+            j = i + i/5;
+            if(i%2 == 0 || i%5 == 0){
+                set_led(leds[j], red_val[sel]);
+            }
+            else{
+                set_rgb_led(leds[j], rgb[sel][0],
+                            rgb[sel][1],rgb[sel][2]);
+            }
+        }
+        else {
+
+        }
+    }
+      
+    
+}
+
 
 #define STACK_CHK_GUARD 0xe2dee396
 uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
