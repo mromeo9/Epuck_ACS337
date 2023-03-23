@@ -72,6 +72,8 @@ void ret_prox(int *prox){
                 prob = i;
             }
 
+        led_switch(prox);
+        
         if(obj == 1){
         	motor_control(proxs, prob);
         }
@@ -138,6 +140,7 @@ void led_switch(int *prox){
     int rgb[3][3] = {{0,10,0},{10,6,0},{10,0,0}};
     int red_val[] = {0,2,1};
     int sel;
+    int j;
     led_name_t leds[] ={LED1, LED2, LED3, LED4, 
                         LED5, LED6, LED7, LED8};
     for(int i = 0; i<8; i++){
