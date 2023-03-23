@@ -24,51 +24,35 @@ MUTEX_DECL(bus_lock);
 CONDVAR_DECL(bus_condvar);
 
 /*Functions Initialisations*/
-void clear_leds(void);
-void spi_comm_start(void);
-void set_led(led_name_t led_number, unsigned int value);
 void ret_prox(int *prox);
 void motor_control(int *prox, int sensor);
+void start(void);
 
 /*Main function*/
 int main(void)
 {
+/*Bus initialisation*/
+    messagebus_init(&bus,&bus_lock, &bus_condvar);
 
 /*Pre function initialisations*/
     halInit();
     chSysInit();
     mpu_init();
     motors_init();
-    messagebus_init(&bus,&bus_lock, &bus_condvar);
     serial_start();
     proximity_start(0);
     calibrate_ir();
     clear_leds();
     spi_comm_start();
-    VL53L0X_start();
 
 /*Variable initialisation*/
     int proxs[8];
-    int rT = 0; /*turn count*/
-    int state; /*State*/
-    int *p_rT; /*pointer to rT*/
-    p_rT = &rT;
-    char str[100];
-    int str_length;
-    int distance;
-
-/*Bus initialisation*/
-
 
     /*Infinite loop*/
     while (1) {
-
         /*Retrieve the proximity information*/
+        start();
         ret_prox(proxs);
-
-        motor_control(state, p_rT, proxs);
-
-
     }
 }
 
@@ -79,18 +63,20 @@ void ret_prox(int *prox){
     OUTPUT - None
     */
 	int obj = 0;
-	int prob;
+	int prob = NULL;
     for(int i =0; i<8; i++){
         prox[i] = get_calibrated_prox(i);
-        If(prox[i] >= 1000){
+        If(prox[i] >= 1000 && (i ~= 2 || i ~= 5)){
             obj = 1;
-            prob = i;
-
-        }
+            if((prox[i] > prob || prob == NULL)){
+                prob = i;
+            }
 
         if(obj == 1){
-        	motor_control(proxs, i);
+        	motor_control(proxs, prob);
         }
+        }
+
     }
 }
 
@@ -98,58 +84,54 @@ void motor_control(int *proxs, int sensor){
     /*
     Fuction to control the motors of the
     INPUT
-    State - state the robot is in
-    rT - Indicating what direction to turn
+    proxs - state the robot is in
+    sensor - which sensor is reading the highest value
     OUTPUT - None
     */
-	int speed = 800;
+	int wan_speed = 10;
+    int con_speed = wan_speed*1000/15.4
+
+    /*Initial stop*/
 	left_motor_set_speed(0);
 	right_motor_set_speed(0);
 
 	int dir;
 	int uTurn = 0;
 
-	if(prox[5] <= 800 && prox[2] <= 800){
-		/*Random*/
-	}
-	else if(prox[5] <= 800 && prox[2] >= 800){
-		dir = -1;
+    /*Logic for the direction of turn*/
+    if(proxs[2] >= 300 && proxs[5] >= 300){
+        uTurn = 1;
+        dir = 1;
+    }
+    else{
+        if(proxs[2] < proxs[5]){
+            dir = -1;
+        }
+        else if(proxs[5] < proxs[2]){
+            dir = 1;
+        }
+        else{
+            dir = 1;
+        }
+    }
 
-	}
-	else if(prox[5] >= 800 && prox[2] <= 800){
-		dir = 1;
+    /*Initiate turn*/
+    left_motor_set_speed(-dir*con_speed);
+	right_motor_set_speed(dir*con_speed);
 
-	}
-	else if(prox[5] >= 800 && prox[2] >= 800){
-		dir = 1;
-		uTurn = 1;
-	}
+    /*Keep turning until the sensor that is the problem is no
+    longer a problem*/
+    while(1){
+        if(proxs[sensor] <= 800){
+            break;
+        }
+    }
 
-	while(1){
-		left_motor_set_speed(-dir*speed);
-		right_motor_set_speed(dir*speed);
-
-		if(dir == -1 && prox[5]>=800 && prox[0]<=50 && prox[7] <=50){
-
-		}
-		else if(dir = 1 && prox[2]>=800 && prox[0]<=50 && prox[7] <=50){
-
-		}
-	}
-
+    /*Resume forward motion*/
+    left_motor_set_speed(con_speed);
+	right_motor_set_speed(con_speed);
 
 }
-
-
-void emg_adj(){
-
-    /*stop and turn the robot until the sensor no longer is in danger*/
-
-    /*Move until the back sensor(checking any other sensor to make sure they are all still safe) is reading then readjust the angle */
-
-    /*check all sensors are safe then proceed forward*/
-}
-
 
 #define STACK_CHK_GUARD 0xe2dee396
 uintptr_t __stack_chk_guard = STACK_CHK_GUARD;
