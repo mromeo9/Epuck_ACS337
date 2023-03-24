@@ -27,7 +27,8 @@ CONDVAR_DECL(bus_condvar);
 void ret_prox(int *prox);
 void motor_control(int *prox, int sensor);
 void led_switch(int *prox);
-void sound_control();
+void follow(void);
+/*void sound_control();*/
 
 /*Main function*/
 int main(void)
@@ -45,15 +46,108 @@ int main(void)
     calibrate_ir();
     clear_leds();
     spi_comm_start();
+    VL53L0X_start();
 
 /*Variable initialisation*/
     int proxs[8];
+    /*left_motor_set_speed(800);
+	right_motor_set_speed(800);*/
+	int con;
+	char str[100];
+	int str_length;
 
     /*Infinite loop*/
     while (1) {
         /*Retrieve the proximity information*/
-        ret_prox(proxs);
+
+    	follow();
+
+    	int value = VL53L0X_get_dist_mm();
+    	str_length = sprintf(str, "Printing number %d!\n",value);
+    	e_send_uart1_char(str, str_length);
+
+    	chThdSleepMilliseconds(1000);
+
+    	/*
+    	ret_prox(proxs);
+    	*/
     }
+}
+
+void follow(void){
+
+	int dist = VL53L0X_get_dist_mm();
+
+	/*
+	 * If 0 and 7 are active and reading between 600 and 500 don't move
+	 * If 0 and 7 read less than 500, move forward
+	 * if 0 and 7 read more than 600, reverse
+	 *
+	 * if 0 > 7, reverse right (within reason)
+	 * else if 0 < 7 reverse left(within reason)
+	 *
+	 * if 0 and 7 not reading
+	 * 		rotate towards sensor that is reading, until 7 and 0 are the same (within reason)
+	 * */
+
+	if(dist >= 40 && dist <= 300){
+		if(dist > 150){
+			left_motor_set_speed(800);
+			right_motor_set_speed(800);
+			while(1){
+				dist = VL53L0X_get_dist_mm();
+				if(dist < 60){
+					break;
+				}
+			}
+			left_motor_set_speed(0);
+			right_motor_set_speed(0);
+		}
+
+	}
+	else{
+
+	}
+
+	int prox[8];
+	for(int i = 0; i<8; i++){
+		prox[i] = get_calibrated_prox(i);
+	}
+
+	if(prox[1] > 600){
+		left_motor_set_speed(800);
+		right_motor_set_speed(-800);
+
+		while(1){
+			prox[1] = get_calibrated_prox(1);
+			prox[6] = get_calibrated_prox(6);
+			if(prox[1] <200){
+				break;
+			}
+
+			left_motor_set_speed(0);
+			right_motor_set_speed(0);
+		}
+	}
+	else if(prox[6]> 600){
+		left_motor_set_speed(-800);
+		right_motor_set_speed(800);
+
+		while(1){
+			prox[1] = get_calibrated_prox(1);
+			prox[6] = get_calibrated_prox(6);
+			if(prox[6] < 200){
+				break;
+			}
+
+			left_motor_set_speed(0);
+			right_motor_set_speed(0);
+		}
+	}
+
+
+
+
 }
 
 void ret_prox(int *prox){
@@ -63,19 +157,27 @@ void ret_prox(int *prox){
     OUTPUT - None
     */
 	int obj = 0;
-	int prob = NULL;
+	int prob;
+	int value;
     for(int i =0; i<8; i++){
-        prox[i] = get_calibrated_prox(i);
-        If(prox[i] >= 1000 && (i ~= 2 || i ~= 5)){
+    	value = get_calibrated_prox(i);
+    	if(value >= 50){
+    		 prox[i] = value;
+    	}
+    	else{
+    		prox[i] = 0;
+    	}
+
+        if(prox[i] >= 900 && (i != 2 || i != 5)){
             obj = 1;
-            if((prox[i] > prob || prob == NULL)){
+            if((prox[i] > prob || i == 0)){
                 prob = i;
             }
 
         led_switch(prox);
         
         if(obj == 1){
-        	motor_control(proxs, prob);
+        	motor_control(prox, prob);
         }
         }
 
@@ -90,12 +192,12 @@ void motor_control(int *prox, int sensor){
     sensor - which sensor is reading the highest value
     OUTPUT - None
     */
-	int wan_speed = 10;
-    int con_speed = wan_speed*1000/15.4
+	int wan_speed = 12;
+    int con_speed = wan_speed*1000/15.4;
 
     /*Initial stop*/
-	left_motor_set_speed(0);
-	right_motor_set_speed(0);
+	/*left_motor_set_speed(0);
+	right_motor_set_speed(0);*/
 
 	int dir;
 	int uTurn = 0;
@@ -118,13 +220,15 @@ void motor_control(int *prox, int sensor){
     }
 
     /*Initiate turn*/
-    left_motor_set_speed(-dir*con_speed);
-	right_motor_set_speed(dir*con_speed);
+    left_motor_set_speed(-dir*con_speed/3);
+	right_motor_set_speed(dir*con_speed/3);
 
     /*Keep turning until the sensor that is the problem is no
     longer a problem*/
+	int sen;
     while(1){
-        if(prox[sensor] <= 800){
+    	sen = get_calibrated_prox(sensor);
+        if(sen <= 850){
             break;
         }
     }
@@ -148,7 +252,7 @@ void led_switch(int *prox){
         if(i == 0 || i == 7){
             set_led(leds[0],red_val[sel]);
         }
-        else if(i ~= 3 && i ~=4){
+        else if(i != 3 && i !=4){
             j = i + i/5;
             if(i%2 == 0 || i%5 == 0){
                 set_led(leds[j], red_val[sel]);
