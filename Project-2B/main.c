@@ -17,6 +17,9 @@
 #include "usbcfg.h"
 #include "sensors/proximity.h"
 #include "sensors/VL53L0X/VL53L0X.h"
+#include "audio/audio_thread.h"
+#include "audio/play_melody.h"
+#include "audio/play_sound_file.h"
 
 /*Defining the bus process*/
 messagebus_t bus;
@@ -28,7 +31,7 @@ void ret_prox(int *prox);
 void motor_control(int *prox, int sensor);
 void led_switch(int *prox);
 void follow(void);
-/*void sound_control();*/
+void sound_control(void);
 
 /*Main function*/
 int main(void)
@@ -47,6 +50,8 @@ int main(void)
     clear_leds();
     spi_comm_start();
     VL53L0X_start();
+    dac_start();
+    playSoundFileStart();
 
 /*Variable initialisation*/
     int proxs[8];
@@ -59,43 +64,34 @@ int main(void)
     /*Infinite loop*/
     while (1) {
         /*Retrieve the proximity information*/
-
-    	follow();
-
-    	int value = VL53L0X_get_dist_mm();
-    	str_length = sprintf(str, "Printing number %d!\n",value);
-    	e_send_uart1_char(str, str_length);
-
-    	chThdSleepMilliseconds(1000);
-
-    	/*
-    	ret_prox(proxs);
-    	*/
+        con = get_selector();
+    	if(con == 0){
+            ret_prox(proxs);
+        }
+        else if(con == 1){
+            follow();
+        }
     }
 }
 
 void follow(void){
 
-	int dist = VL53L0X_get_dist_mm();
+    int set_speed = 800;
+	int dist =  VL53L0X_get_dist_mm();
 
-	/*
-	 * If 0 and 7 are active and reading between 600 and 500 don't move
-	 * If 0 and 7 read less than 500, move forward
-	 * if 0 and 7 read more than 600, reverse
-	 *
-	 * if 0 > 7, reverse right (within reason)
-	 * else if 0 < 7 reverse left(within reason)
-	 *
-	 * if 0 and 7 not reading
-	 * 		rotate towards sensor that is reading, until 7 and 0 are the same (within reason)
-	 * */
+	for(int i = 0; i<8; i++){
+		prox[i] = get_calibrated_prox(i);
+	}
+
+    led_switch(prox);
+
 
 	if(dist >= 40 && dist <= 300){
 		if(dist > 150){
-			left_motor_set_speed(800);
-			right_motor_set_speed(800);
+			left_motor_set_speed(set_speed );
+			right_motor_set_speed(set_speed );
+            int c = 0;
 			while(1){
-				dist = VL53L0X_get_dist_mm();
 				if(dist < 60){
 					break;
 				}
@@ -103,66 +99,67 @@ void follow(void){
 			left_motor_set_speed(0);
 			right_motor_set_speed(0);
 		}
-
-	}
-	else{
-
 	}
 
-	int prox[8];
-	for(int i = 0; i<8; i++){
-		prox[i] = get_calibrated_prox(i);
-	}
+    int rT = prox[1]+ prox[2] + prox[3];
+    int lT = prox[4] + prox[5] + prox[6];
+    int check;
 
-	if(prox[1] > 600){
-		left_motor_set_speed(800);
-		right_motor_set_speed(-800);
-
-		while(1){
-			prox[1] = get_calibrated_prox(1);
-			prox[6] = get_calibrated_prox(6);
-			if(prox[1] <200){
-				break;
-			}
-
-			left_motor_set_speed(0);
-			right_motor_set_speed(0);
-		}
-	}
-	else if(prox[6]> 600){
-		left_motor_set_speed(-800);
-		right_motor_set_speed(800);
-
-		while(1){
-			prox[1] = get_calibrated_prox(1);
-			prox[6] = get_calibrated_prox(6);
-			if(prox[6] < 200){
-				break;
-			}
-
-			left_motor_set_speed(0);
-			right_motor_set_speed(0);
-		}
-	}
-
-
-
-
+    if(rT > prox[0]){
+        int check = prox[0];
+        left_motor_set_speed(set_speed);
+        right_motor_set_speed(-set_speed);
+        while(1){
+            check = get_calibrated_prox(0);
+            if(check > rT){
+                break;
+            }
+        }
+        left_motor_set_speed(0);
+        right_motor_set_speed(0);
+    }
+	else if(lT > prox[7]){
+        int check = prox[7];
+        left_motor_set_speed(-set_speed);
+        right_motor_set_speed(set_speed);
+        while(1){
+            check = get_calibrated_prox(7);
+            if(check > lT){
+                break;
+            }
+        }
+        left_motor_set_speed(set_speed);
+        right_motor_set_speed(set_speed);
+    }
+    else if(prox[0] >= 1000 || prox[7] >= 1000){
+        left_motor_set_speed(-set_speed);
+        right_motor_set_speed(-set_speed);
+        while(1){
+            check = (get_calibrated_prox(7) + get_calibrated_prox(7))/2;
+            if(check <= 800){
+                break;
+            }
+        left_motor_set_speed(0);
+        right_motor_set_speed(0);  
+        }  
+    }
 }
 
+
+
 void ret_prox(int *prox){
-    /*
+     /*
     Fuction that returns the readings to each proximity sensor
     INPUT - Pointer to an array
-    OUTPUT - None
-    */
+    OUTPUT - None*/
+    
 	int obj = 0;
-	int prob;
+	int prob = -1;
 	int value;
     for(int i =0; i<8; i++){
     	value = get_calibrated_prox(i);
     	if(value >= 50){
-    		 prox[i] = value;
+    	    prox[i] = value;
     	}
     	else{
     		prox[i] = 0;
@@ -170,17 +167,20 @@ void ret_prox(int *prox){
 
         if(prox[i] >= 900 && (i != 2 || i != 5)){
             obj = 1;
-            if((prox[i] > prob || i == 0)){
+            if((prox[i] > prob || prob == -1)){
                 prob = i;
             }
-
-        led_switch(prox);
+        }
         
-        if(obj == 1){
-        	motor_control(prox, prob);
-        }
-        }
+    }   
 
+    /*Should fix the LED*/
+    led_switch(prox);
+    
+    /*if moving this doesn't fix the smoothness, try error count*/
+    if(obj){
+        sound_control();
+        motor_control(prox, prob);
     }
 }
 
@@ -190,46 +190,73 @@ void motor_control(int *prox, int sensor){
     INPUT
     proxs - state the robot is in
     sensor - which sensor is reading the highest value
-    OUTPUT - None
-    */
-	int wan_speed = 12;
+    OUTPUT - None*/
+    
+	int wan_speed = 13;
     int con_speed = wan_speed*1000/15.4;
+    int epi;
 
     /*Initial stop*/
-	/*left_motor_set_speed(0);
-	right_motor_set_speed(0);*/
+	left_motor_set_speed(0);
+	right_motor_set_speed(0);
 
 	int dir;
 	int uTurn = 0;
+    int lT;
+    int rT;
+
+    /*Set averages*/
+
+    rT = prox[0] + prox[1] + prox[2] + prox[3];
+    lT = prox[4] + prox[5] + prox[6] + prox[7];
 
     /*Logic for the direction of turn*/
-    if(prox[2] >= 300 && prox[5] >= 300){
+    if(rT/4 >= 250 && lT/4 >= 250){
         uTurn = 1;
         dir = 1;
     }
     else{
-        if(prox[2] < prox[5]){
+        if(rT < lT){
             dir = -1;
         }
-        else if(prox[5] < prox[2]){
+        else if(lT < rT){
             dir = 1;
         }
         else{
-            dir = 1;
+            epi = rand()%100 + 1;
+            if(epi <= 50){
+                dir = 1;
+            }
+            else{
+                dir = -1;
+            }
         }
     }
 
     /*Initiate turn*/
-    left_motor_set_speed(-dir*con_speed/3);
-	right_motor_set_speed(dir*con_speed/3);
+    left_motor_set_speed(-dir*con_speed);
+	right_motor_set_speed(dir*con_speed);
 
     /*Keep turning until the sensor that is the problem is no
     longer a problem*/
-	int sen;
+	int senA;
+    int senB;
     while(1){
-    	sen = get_calibrated_prox(sensor);
-        if(sen <= 850){
-            break;
+        if(uTurn){
+            senA = get_calibrated_prox(0);
+            senB = get_calibrated_prox(7);
+
+            if((senA + senB)/2 <=50){
+                break;
+            }
+
+        }
+        else{
+            senA = get_calibrated_prox(sensor);
+
+            if(senA <= 850){
+                break;
+            }
         }
     }
 
@@ -237,6 +264,11 @@ void motor_control(int *prox, int sensor){
     left_motor_set_speed(con_speed);
 	right_motor_set_speed(con_speed);
 
+}
+
+void sound_control(void){
+    playSoundFile("beep-04.mp3", option, 10000);
+    waitSoundFileHasFinished()
 }
 
 void led_switch(int *prox){
@@ -262,12 +294,20 @@ void led_switch(int *prox){
                             rgb[sel][1],rgb[sel][2]);
             }
         }
-        else {
-
+        else{
+            set_led(leds[4], red_val[sel])
+            if(i == 3){
+                sel = (prox[i] + prox[i-1])/3;
+                set_rgb_led(leds[i], rgb[sel][0],
+                            rgb[sel][1],rgb[sel][2]);
+            }
+            else{
+                sel = (prox[i] + prox[i+1])/3;
+                set_rgb_led(leds[i+1], rgb[sel][0],
+                            rgb[sel][1],rgb[sel][2]);
+            }
         }
-    }
-      
-    
+    } 
 }
 
 
