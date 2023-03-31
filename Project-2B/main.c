@@ -30,7 +30,7 @@ CONDVAR_DECL(bus_condvar);
 void ret_prox(int *prox);
 void motor_control(int *prox, int sensor);
 void led_switch(int *prox);
-void follow(void);
+void follow(int *prox);
 void sound_control(void);
 
 /*Main function*/
@@ -55,94 +55,110 @@ int main(void)
 
 /*Variable initialisation*/
     int proxs[8];
-    /*left_motor_set_speed(800);
-	right_motor_set_speed(800);*/
 	int con;
 	char str[100];
 	int str_length;
-
     /*Infinite loop*/
     while (1) {
         /*Retrieve the proximity information*/
         con = get_selector();
     	if(con == 0){
+    	    left_motor_set_speed(800);
+    		right_motor_set_speed(800);
             ret_prox(proxs);
         }
         else if(con == 1){
-            follow();
+    	    left_motor_set_speed(0);
+    		right_motor_set_speed(0);
+            follow(proxs);
         }
     }
 }
 
-void follow(void){
+void follow(int *prox){
+
+	char str[100];
+	int str_length;
+	int close = 0;
 
     int set_speed = 800;
 	int dist =  VL53L0X_get_dist_mm();
 
 	for(int i = 0; i<8; i++){
 		prox[i] = get_calibrated_prox(i);
+		if(prox[i] >= 800){
+			close = 1;
+		}
 	}
 
     led_switch(prox);
 
+    if(!close){
+    	if(dist >= 20 && dist <= 150){
+    			if(dist > 50){
+    				left_motor_set_speed(set_speed );
+    				right_motor_set_speed(set_speed );
+    				while(1){
+    					dist = VL53L0X_get_dist_mm();
+    					if(dist < 65 || dist > 200){
+    						break;
+    					}
+    				}
+    				left_motor_set_speed(0);
+    				right_motor_set_speed(0);
+    			}
+    		}
+    }
 
-	if(dist >= 40 && dist <= 300){
-		if(dist > 150){
-			left_motor_set_speed(set_speed );
-			right_motor_set_speed(set_speed );
-            int c = 0;
+    if(close){
+		int rT = prox[1]+ prox[2] + prox[3];
+		int lT = prox[4] + prox[5] + prox[6];
+		int check;
+
+		if(rT/4 > prox[0] +100){
+			int check = prox[0];
+			int count = 0;
+			left_motor_set_speed(set_speed);
+			right_motor_set_speed(-set_speed);
+			int x;
 			while(1){
-				if(dist < 60){
+				check = get_calibrated_prox(7);
+				for(int i =0; i<8; i++){
+					x = get_calibrated_prox(i);
+					if(x < 800){
+						count++;
+					}
+				}
+				if(check > 800|| count == 8){
 					break;
 				}
 			}
 			left_motor_set_speed(0);
 			right_motor_set_speed(0);
 		}
-	}
+		else if(lT/4 > prox[7] +100){
+			int check = prox[7];
+			int count = 0;
+			left_motor_set_speed(-set_speed);
+			right_motor_set_speed(set_speed);
+			int x;
+			while(1){
+				check = get_calibrated_prox(0);
+				for(int i =0; i<8; i++){
+					x = get_calibrated_prox(i);
+					if(x < 800){
+						count++;
+					}
+				}
+				if(check > 800 || count == 8){
+					break;
+				}
+			}
+			left_motor_set_speed(0);
+			right_motor_set_speed(0);
+		}
+    }
 
-    int rT = prox[1]+ prox[2] + prox[3];
-    int lT = prox[4] + prox[5] + prox[6];
-    int check;
-
-    if(rT > prox[0]){
-        int check = prox[0];
-        left_motor_set_speed(set_speed);
-        right_motor_set_speed(-set_speed);
-        while(1){
-            check = get_calibrated_prox(0);
-            if(check > rT){
-                break;
-            }
-        }
-        left_motor_set_speed(0);
-        right_motor_set_speed(0);
-    }
-	else if(lT > prox[7]){
-        int check = prox[7];
-        left_motor_set_speed(-set_speed);
-        right_motor_set_speed(set_speed);
-        while(1){
-            check = get_calibrated_prox(7);
-            if(check > lT){
-                break;
-            }
-        }
-        left_motor_set_speed(set_speed);
-        right_motor_set_speed(set_speed);
-    }
-    else if(prox[0] >= 1000 || prox[7] >= 1000){
-        left_motor_set_speed(-set_speed);
-        right_motor_set_speed(-set_speed);
-        while(1){
-            check = (get_calibrated_prox(7) + get_calibrated_prox(7))/2;
-            if(check <= 800){
-                break;
-            }
-        left_motor_set_speed(0);
-        right_motor_set_speed(0);  
-        }  
-    }
 }
 
 
@@ -179,7 +195,7 @@ void ret_prox(int *prox){
     
     /*if moving this doesn't fix the smoothness, try error count*/
     if(obj){
-        sound_control();
+        /*sound_control();*/
         motor_control(prox, prob);
     }
 }
@@ -265,12 +281,12 @@ void motor_control(int *prox, int sensor){
 	right_motor_set_speed(con_speed);
 
 }
-
+/*
 void sound_control(void){
     playSoundFile("beep-04.mp3", option, 10000);
     waitSoundFileHasFinished()
 }
-
+*/
 void led_switch(int *prox){
 
     int rgb[3][3] = {{0,10,0},{10,6,0},{10,0,0}};
@@ -295,7 +311,7 @@ void led_switch(int *prox){
             }
         }
         else{
-            set_led(leds[4], red_val[sel])
+            set_led(leds[4], red_val[sel]);
             if(i == 3){
                 sel = (prox[i] + prox[i-1])/3;
                 set_rgb_led(leds[i], rgb[sel][0],
